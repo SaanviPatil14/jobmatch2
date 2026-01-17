@@ -1,14 +1,13 @@
-// src/App.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'; // Changed imports
-import { GoogleGenAI } from "@google/genai";
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 
-// Imports
+// Types & Mock Data
 import { Candidate, Job, MatchResult, UserRole } from './types';
 import { INITIAL_CANDIDATE, INITIAL_MOCK_JOBS, MOCK_POOL_CANDIDATES } from './data/mockData';
 import { calculateMatch } from './services/engine';
 
+// Components
 import LandingPage from './components/LandingPage';
 import AuthPage from './components/AuthPage';
 import CandidateDashboard from './components/pages/CandidateDashboard';
@@ -19,7 +18,6 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [userRole, setUserRole] = useState<UserRole>('candidate');
-  const [activeTab, setActiveTab] = useState<'matches' | 'profile'>('matches');
   
   // Dashboard State
   const [activeCandidate, setActiveCandidate] = useState<Candidate>(INITIAL_CANDIDATE);
@@ -31,41 +29,56 @@ const App: React.FC = () => {
   const [aiExplanation, setAiExplanation] = useState("");
   const [isJobModalOpen, setIsJobModalOpen] = useState(false);
   
-  // New Job Form State
   const [newJob, setNewJob] = useState<Partial<Job>>({
     title: '', company: 'TechCorp', location: 'Bangalore', required_skills: [], experience_required: '1-3 years', salary_range: [1000000, 2000000]
   });
 
   // Engine Logic
   const runEngine = useCallback(() => {
-    if (userRole === 'candidate') {
-      const results = jobs.map(job => calculateMatch(activeCandidate, job));
-      results.sort((a, b) => b.match_score - a.match_score);
-      setMatches(results);
-      if (results.length > 0 && !selectedMatch) setSelectedMatch(results[0]);
-    } else {
-      if (!selectedJob) return;
-      const results = MOCK_POOL_CANDIDATES.map(cand => ({
-        ...calculateMatch(cand, selectedJob),
-        candidate_details: cand
-      }));
-      results.sort((a, b) => b.match_score - a.match_score);
-      setMatches(results);
-      if (results.length > 0 && !selectedMatch) setSelectedMatch(results[0]);
-    }
-  }, [userRole, activeCandidate, jobs, selectedJob, selectedMatch]);
+  if (userRole === 'candidate') {
+    const results = jobs.map(job => calculateMatch(activeCandidate, job));
+    results.sort((a, b) => b.match_score - a.match_score);
+    setMatches(results);
+    // Candidates should see the best match immediately
+    if (results.length > 0 && !selectedMatch) setSelectedMatch(results[0]);
+  } else {
+    if (!selectedJob) return;
+    const results = MOCK_POOL_CANDIDATES.map(cand => ({
+      ...calculateMatch(cand, selectedJob),
+      candidate_details: cand
+    }));
+    results.sort((a, b) => b.match_score - a.match_score);
+    setMatches(results);
+    
+  }
+}, [userRole, activeCandidate, jobs, selectedJob, selectedMatch]);
 
+  // Handle Route & Role Changes (State Cleanup)
+useEffect(() => {
+  // Always clear these when moving between pages to prevent "ghost" data
+  setSelectedMatch(null);
+  setAiExplanation("");
+  setIsAiExplaining(false);
+
+  if (location.pathname.includes('dashboard')) {
+    runEngine();
+  }
+}, [location.pathname, userRole]); 
+
+  // Specific cleanup when Employer changes the active Job
   useEffect(() => {
-    // Run engine only when on dashboard routes
-    if (location.pathname.includes('dashboard')) {
-      runEngine();
+    if (userRole === 'employer') {
+      setSelectedMatch(null);
+      setAiExplanation("");
     }
-  }, [runEngine, location.pathname, selectedJob]);
+  }, [selectedJob, userRole]);
 
-  // Determine if we should show the Header (Hide on Landing/Auth)
   const showHeader = location.pathname.includes('dashboard') || location.pathname === '/profile';
 
   const handleLogout = () => {
+    setUserRole('candidate');
+    setSelectedMatch(null);
+    setAiExplanation("");
     navigate('/');
   };
 
@@ -81,7 +94,7 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen bg-slate-50 pb-20 transition-colors duration-500 ${userRole === 'candidate' ? 'bg-emerald-50/20' : 'bg-indigo-50/20'}`}>
       
-      {/* GLOBAL HEADER (Only visible when logged in) */}
+      {/* GLOBAL HEADER */}
       {showHeader && (
         <header className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-50 px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
@@ -90,41 +103,54 @@ const App: React.FC = () => {
               {userRole === 'candidate' ? 'CANDIDATE' : 'EMPLOYER'}<span className="text-indigo-600">PRO</span>
             </h1>
           </div>
-          <div className="flex items-center gap-8">
-            {userRole === 'candidate' && (
-              <nav className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+
+          <nav className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-[20px]">
+            {userRole === 'candidate' ? (
+              <>
                 <button 
                   onClick={() => navigate('/candidate-dashboard')} 
-                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${location.pathname === '/candidate-dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
+                  className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${location.pathname === '/candidate-dashboard' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   Discover
                 </button>
                 <button 
                   onClick={() => navigate('/profile')} 
-                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${location.pathname === '/profile' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
+                  className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${location.pathname === '/profile' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   My Profile
                 </button>
-              </nav>
-            )}
-            <div className="flex items-center gap-6">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-black text-slate-800 uppercase leading-none mb-1">{userRole === 'candidate' ? activeCandidate.name : 'Talent Acquisition'}</div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{userRole}</div>
-              </div>
-              <button onClick={handleLogout} className="p-3 bg-slate-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
-                <LogOut size={20} />
+              </>
+            ) : (
+              <button 
+                onClick={() => navigate('/employer-dashboard')} 
+                className={`px-6 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${location.pathname === '/employer-dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Employer Console
               </button>
+            )}
+          </nav>
+
+          <div className="flex items-center gap-6">
+            <div className="text-right hidden sm:block">
+              <div className="text-sm font-black text-slate-800 uppercase leading-none mb-1">
+                {userRole === 'candidate' ? activeCandidate.name : 'Talent Acquisition'}
+              </div>
+              <div className={`text-[10px] font-bold uppercase tracking-[0.2em] ${userRole === 'candidate' ? 'text-emerald-500' : 'text-indigo-500'}`}>
+                {userRole}
+              </div>
             </div>
+            <button onClick={handleLogout} className="p-3 bg-slate-50 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all group border border-slate-100">
+              <LogOut size={20} className="group-hover:scale-110 transition-transform" />
+            </button>
           </div>
         </header>
       )}
 
       {/* ROUTING LOGIC */}
-      <main className={showHeader ? "max-w-7xl mx-auto px-6 py-8" : ""}>
+      <main className={showHeader ? "max-w-7xl mx-auto px-6 py-8" : "w-full min-h-screen"}>
         <Routes>
-          <Route path="/" element={<LandingPage onStart={(type) => navigate('/auth')} />} />
-          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/" element={<LandingPage onStart={() => navigate('/auth')} />} />
+          <Route path="/auth" element={<AuthPage onLogin={(role: UserRole) => setUserRole(role)} />} />
           
           <Route path="/candidate-dashboard" element={
             <CandidateDashboard 
@@ -135,10 +161,6 @@ const App: React.FC = () => {
               isAiExplaining={isAiExplaining}
               aiExplanation={aiExplanation}
             />
-          } />
-
-          <Route path="/profile" element={
-            <CandidateProfileView candidate={activeCandidate} editable onUpdate={setActiveCandidate} />
           } />
 
           <Route path="/employer-dashboard" element={
@@ -157,6 +179,10 @@ const App: React.FC = () => {
                isAiExplaining={isAiExplaining}
                aiExplanation={aiExplanation}
             />
+          } />
+
+          <Route path="/profile" element={
+            <CandidateProfileView candidate={activeCandidate} editable onUpdate={setActiveCandidate} />
           } />
         </Routes>
       </main>

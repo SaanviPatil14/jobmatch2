@@ -10,7 +10,7 @@ export interface Education {
 export interface Candidate {
   id: string;
   name: string;
-  skills: string[];
+  skills: string[];x
   experience_years: number;
   preferred_locations: string[];
   preferred_roles: string[];
